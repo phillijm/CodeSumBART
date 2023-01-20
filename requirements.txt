@@ -3,5 +3,9 @@ evaluate==0.2.2
 huggingface-hub==0.10.0
 pyarrow==9.0.0
 tokenizers==0.12.1
+torch==1.13.0
 transformers==4.22.2
+nltk==3.8
+absl-py==1.3.0
 bert-score==0.3.12
+rouge-score==0.1.2
