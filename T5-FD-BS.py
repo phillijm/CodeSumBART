@@ -45,7 +45,6 @@ def generateJSONData(dir):
     with open(f"./dataset/{dir}/javadoc.original", encoding='UTF-8') as fp1:
         comments = fp1.readlines()
     for cnt in range(len(code) - 1):
-        # for cnt in range(5):
         data.append({})
         data[cnt]["text"] = code[cnt]
         data[cnt]["summary"] = comments[cnt]
@@ -97,9 +96,10 @@ def computeMetrics(predictions, labels):
                         references=refs,
                         model_type="microsoft/deberta-xlarge-mnli",
                         lang="en",
-                        device="gpu",
+                        device="cuda",
                         batch_size=48)["f1"]
-    return {"BERTScore F1": f1}
+    meanF1 = sum(f1) / len(f1)
+    return {"BERTScore F1": meanF1}
 
 
 def postprocess(preds, labels):
