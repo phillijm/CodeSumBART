@@ -19,11 +19,15 @@ from tqdm.auto import tqdm
 import numpy as np
 
 torch.cuda.empty_cache()  # Clear the PyTorch cache - saves GPU memory.
+torch.backends.cudnn.benchmark = True  # Benchmark & run fastest convolutions.
 
 baseName = "t5-small"
 metricName = "bleu"
 outputDir = "./Exp1-FuncomDataset-Results-B1"
 tokenizer = AutoTokenizer.from_pretrained(baseName)
+ignoreID = torch.tensor(-100, device=torch.device("cuda:0"))
+padTokenID = torch.tensor(tokenizer.pad_token_id,
+                          device=torch.device("cuda:0"))
 
 
 def generateJSONData(dir):
@@ -45,7 +49,6 @@ def generateJSONData(dir):
     with open(f"./dataset/{dir}/javadoc.original", encoding='UTF-8') as fp1:
         comments = fp1.readlines()
     for cnt in range(len(code) - 1):
-        # for cnt in range(5):
         data.append({})
         data[cnt]["text"] = code[cnt]
         data[cnt]["summary"] = comments[cnt]
@@ -87,13 +90,7 @@ def computeMetrics(predictions, labels):
         Dict: the final computed metric.
     """
     metric = evaluate.load(metricName)
-    refs = [[]]
-    for label in labels:
-        refs.append([label])
-    del refs[0]
-    for cnt in range(len(predictions)):
-        if predictions[cnt] == '':
-            predictions[cnt] = " "
+    refs = [[label] for label in labels]
     bleu = metric.compute(predictions=predictions,
                           references=refs,
                           max_order=1,
@@ -172,7 +169,7 @@ accelerator = Accelerator()
 model, optimizer, trainDataLoader, evalDataLoader = accelerator.prepare(
     model, optimizer, trainDataLoader, evalDataLoader)
 
-numTrainEpochs = 20
+numTrainEpochs = 200
 numUpdateStepsPerEpoch = len(trainDataLoader)
 numTrainingSteps = numTrainEpochs * numUpdateStepsPerEpoch
 lrScheduler = get_scheduler(
@@ -182,8 +179,10 @@ lrScheduler = get_scheduler(
     num_training_steps=numTrainingSteps)
 
 # ------------------------------ Training Loop --------------------------------
+previousValidationResult = 0.0
+nonImprovingEpochs = 0
 for epoch in range(numTrainEpochs):
-    # Train
+    # Training
     model.train()
     for batch in tqdm(trainDataLoader):
         outputs = model(**batch)
@@ -192,7 +191,7 @@ for epoch in range(numTrainEpochs):
         optimizer.step()
         lrScheduler.step()
         optimizer.zero_grad()
-    # Eval
+    # Model Validation
     model.eval()
     for batch in tqdm(evalDataLoader):
         with torch.no_grad():
@@ -200,7 +199,6 @@ for epoch in range(numTrainEpochs):
                 batch["input_ids"],
                 attention_mask=batch["attention_mask"],
                 max_length=512)
-
             generatedTokens = accelerator.pad_across_processes(
                 generatedTokens,
                 dim=1,
@@ -211,12 +209,8 @@ for epoch in range(numTrainEpochs):
                 labels,
                 dim=1,
                 pad_index=tokenizer.pad_token_id)
-
-            generatedTokens = accelerator.gather(generatedTokens).cpu().numpy()
-            labels = accelerator.gather(labels).cpu().numpy()
-            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-            if isinstance(generatedTokens, tuple):
-                generatedTokens = generatedTokens[0]
+            labels = labels.where(labels != ignoreID,
+                                  padTokenID)
             decodedPreds = tokenizer.batch_decode(
                 generatedTokens, skip_special_tokens=True)
 
@@ -230,8 +224,24 @@ for epoch in range(numTrainEpochs):
     print(f"Epoch {epoch}: {result}")
 
 # ------------------------------- Save Model ----------------------------------
-    accelerator.wait_for_everyone()
-    unwrappedModel = accelerator.unwrap_model(model)
-    unwrappedModel.save_pretrained(outputDir, save_function=accelerator.save)
-    if accelerator.is_main_process:
-        tokenizer.save_pretrained(outputDir)
+    if result["BLEU-1"] > previousValidationResult:  # Don't kill best model.
+        previousValidationResult = result
+        accelerator.wait_for_everyone()
+        unwrappedModel = accelerator.unwrap_model(model)
+        unwrappedModel.save_pretrained(outputDir,
+                                       save_function=accelerator.save)
+        if accelerator.is_main_process:
+            tokenizer.save_pretrained(outputDir)
+        nonImprovingEpochs = 0
+    else:
+        nonImprovingEpochs += 1
+        if nonImprovingEpochs > 5:  # Don't waste compute if not improving.
+            with open("TrainData.txt", 'w') as fp:
+                fp.write(f"actualEpochs: {epoch}")
+            break
+        model.load_state_dict(torch.load(outputDir))
+with open("TrainData.txt", 'a') as fp:
+    fp.write(f"baseName: {baseName}")
+    fp.write(f"metricName: {metricName}")
+    fp.write(f"outputDir: {outputDir}")
+    fp.write(f"numEpochs: {numTrainEpochs}")
