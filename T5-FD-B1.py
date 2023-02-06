@@ -98,22 +98,6 @@ def computeMetrics(predictions, labels):
     return {"BLEU-1": bleu}
 
 
-def postprocess(preds, labels):
-    """ Simple postprocessing for predictions and their labels.
-
-    Args:
-        predictions (list): the predictions returned by the model.
-        labels (list): the labels associated with the predictions.
-
-    Returns:
-        predictions (list): the decoded predictions returned by the model.
-        labels (list): the decoded labels associated with the predictions.
-    """
-    decodedPreds = [pred.strip() for pred in preds]
-    decodedLabels = [[label.strip()] for label in labels]
-    return decodedPreds, decodedLabels
-
-
 generateJSONData("training")
 generateJSONData("validation")
 
