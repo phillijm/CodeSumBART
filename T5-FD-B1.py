@@ -195,37 +195,25 @@ for epoch in range(numTrainEpochs):
     model.eval()
     for batch in tqdm(evalDataLoader):
         with torch.no_grad():
-            generatedTokens = accelerator.unwrap_model(model).generate(
-                batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                max_length=512)
-            generatedTokens = accelerator.pad_across_processes(
-                generatedTokens,
-                dim=1,
-                pad_index=tokenizer.pad_token_id)
+            batch = {k: v.to(torch.device("cuda:0")) for k, v in batch.items()}
+            outputs = model(**batch)
+        logits = outputs.logits
+        decodedPreds = tokenizer.batch_decode(torch.argmax(logits, dim=-1),
+                                              skip_special_tokens=True)
+        decodedPreds = [pred.strip() for pred in decodedPreds]
 
-            labels = batch["labels"]
-            labels = accelerator.pad_across_processes(
-                labels,
-                dim=1,
-                pad_index=tokenizer.pad_token_id)
-            labels = labels.where(labels != ignoreID,
-                                  padTokenID)
-            decodedPreds = tokenizer.batch_decode(
-                generatedTokens, skip_special_tokens=True)
-
-            decodedLabels = tokenizer.batch_decode(labels,
-                                                   skip_special_tokens=True)
-
-            decodedPreds, decodedLabels = postprocess(decodedPreds,
-                                                      decodedLabels)
+        labels = batch["labels"]
+        labels = labels.where(labels != ignoreID, padTokenID)
+        decodedLabels = tokenizer.batch_decode(labels,
+                                               skip_special_tokens=True)
+        decodedLabels = [[label.strip()] for label in decodedLabels]
 
     result = computeMetrics(decodedPreds, decodedLabels)
     print(f"Epoch {epoch}: {result}")
 
 # ------------------------------- Save Model ----------------------------------
     if result["BLEU-1"] > previousValidationResult:  # Don't kill best model.
-        previousValidationResult = result
+        previousValidationResult = result["BLEU-1"]
         accelerator.wait_for_everyone()
         unwrappedModel = accelerator.unwrap_model(model)
         unwrappedModel.save_pretrained(outputDir,
