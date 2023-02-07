@@ -16,7 +16,6 @@ from transformers import AutoModelForSeq2SeqLM, \
                          get_scheduler
 from datasets import load_dataset
 from tqdm.auto import tqdm
-import numpy as np
 
 torch.cuda.empty_cache()  # Clear the PyTorch cache - saves GPU memory.
 torch.backends.cudnn.benchmark = True  # Benchmark & run fastest convolutions.
@@ -165,6 +164,8 @@ lrScheduler = get_scheduler(
 # ------------------------------ Training Loop --------------------------------
 previousValidationResult = 0.0
 nonImprovingEpochs = 0
+minEpochs = 20
+bestModel = None
 for epoch in range(numTrainEpochs):
     # Training
     model.train()
@@ -206,12 +207,13 @@ for epoch in range(numTrainEpochs):
             tokenizer.save_pretrained(outputDir)
         nonImprovingEpochs = 0
     else:
-        nonImprovingEpochs += 1
-        if nonImprovingEpochs > 5:  # Don't waste compute if not improving.
-            with open("TrainData.txt", 'w') as fp:
-                fp.write(f"actualEpochs: {epoch}")
-            break
-        model.load_state_dict(torch.load(outputDir))
+        if epoch >= minEpochs:  # Train for minimum number of epochs anyway.
+            nonImprovingEpochs += 1
+            if nonImprovingEpochs > 5:  # Don't waste compute if not improving.
+                with open("TrainData.txt", 'w') as fp:
+                    fp.write(f"actualEpochs: {epoch}")
+                break
+        model = model.from_pretrained(outputDir).to(torch.device("cuda:0"))
 with open("TrainData.txt", 'a') as fp:
     fp.write(f"baseName: {baseName}")
     fp.write(f"metricName: {metricName}")
