@@ -165,7 +165,6 @@ lrScheduler = get_scheduler(
 previousValidationResult = 0.0
 nonImprovingEpochs = 0
 minEpochs = 20
-bestModel = None
 for epoch in range(numTrainEpochs):
     # Training
     model.train()
