@@ -16,14 +16,17 @@ from transformers import AutoModelForSeq2SeqLM, \
                          get_scheduler
 from datasets import load_dataset
 from tqdm.auto import tqdm
-import numpy as np
 
 torch.cuda.empty_cache()  # Clear the PyTorch cache - saves GPU memory.
+torch.backends.cudnn.benchmark = True  # Benchmark & run fastest convolutions.
 
 baseName = "t5-small"
 metricName = "bertscore"
 outputDir = "./Exp1-FuncomDataset-Results-BS"
 tokenizer = AutoTokenizer.from_pretrained(baseName)
+ignoreID = torch.tensor(-100, device=torch.device("cuda:0"))
+padTokenID = torch.tensor(tokenizer.pad_token_id,
+                          device=torch.device("cuda:0"))
 
 
 def generateJSONData(dir):
@@ -86,12 +89,7 @@ def computeMetrics(predictions, labels):
         Dict: the final computed metric.
     """
     metric = evaluate.load(metricName)
-    refs = []
-    for ref in labels:
-        refs.append(ref[0])
-    for cnt in range(len(predictions)):
-        if predictions[cnt] == '':
-            predictions[cnt] = " "
+    refs = [label for label in labels]
     f1 = metric.compute(predictions=predictions,
                         references=refs,
                         model_type="microsoft/deberta-xlarge-mnli",
@@ -100,22 +98,6 @@ def computeMetrics(predictions, labels):
                         batch_size=48)["f1"]
     meanF1 = sum(f1) / len(f1)
     return {"BERTScore F1": meanF1}
-
-
-def postprocess(preds, labels):
-    """ Simple postprocessing for predictions and their labels.
-
-    Args:
-        predictions (list): the predictions returned by the model.
-        labels (list): the labels associated with the predictions.
-
-    Returns:
-        predictions (list): the decoded predictions returned by the model.
-        labels (list): the decoded labels associated with the predictions.
-    """
-    decodedPreds = [pred.strip() for pred in preds]
-    decodedLabels = [[label.strip()] for label in labels]
-    return decodedPreds, decodedLabels
 
 
 generateJSONData("training")
@@ -173,7 +155,7 @@ accelerator = Accelerator()
 model, optimizer, trainDataLoader, evalDataLoader = accelerator.prepare(
     model, optimizer, trainDataLoader, evalDataLoader)
 
-numTrainEpochs = 20
+numTrainEpochs = 200
 numUpdateStepsPerEpoch = len(trainDataLoader)
 numTrainingSteps = numTrainEpochs * numUpdateStepsPerEpoch
 lrScheduler = get_scheduler(
@@ -183,8 +165,11 @@ lrScheduler = get_scheduler(
     num_training_steps=numTrainingSteps)
 
 # ------------------------------ Training Loop --------------------------------
+previousValidationResult = 0.0
+nonImprovingEpochs = 0
+minEpochs = 20
 for epoch in range(numTrainEpochs):
-    # Train
+    # Training
     model.train()
     for batch in tqdm(trainDataLoader):
         outputs = model(**batch)
@@ -193,46 +178,47 @@ for epoch in range(numTrainEpochs):
         optimizer.step()
         lrScheduler.step()
         optimizer.zero_grad()
-    # Eval
+    # Model Validation
     model.eval()
     for batch in tqdm(evalDataLoader):
         with torch.no_grad():
-            generatedTokens = accelerator.unwrap_model(model).generate(
-                batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                max_length=512)
+            batch = {k: v.to(torch.device("cuda:0")) for k, v in batch.items()}
+            outputs = model(**batch)
+        logits = outputs.logits
+        decodedPreds = tokenizer.batch_decode(torch.argmax(logits, dim=-1),
+                                              skip_special_tokens=True)
+        decodedPreds = [pred.strip() for pred in decodedPreds]
 
-            generatedTokens = accelerator.pad_across_processes(
-                generatedTokens,
-                dim=1,
-                pad_index=tokenizer.pad_token_id)
-
-            labels = batch["labels"]
-            labels = accelerator.pad_across_processes(
-                labels,
-                dim=1,
-                pad_index=tokenizer.pad_token_id)
-
-            generatedTokens = accelerator.gather(generatedTokens).cpu().numpy()
-            labels = accelerator.gather(labels).cpu().numpy()
-            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-            if isinstance(generatedTokens, tuple):
-                generatedTokens = generatedTokens[0]
-            decodedPreds = tokenizer.batch_decode(
-                generatedTokens, skip_special_tokens=True)
-
-            decodedLabels = tokenizer.batch_decode(labels,
-                                                   skip_special_tokens=True)
-
-            decodedPreds, decodedLabels = postprocess(decodedPreds,
-                                                      decodedLabels)
+        labels = batch["labels"]
+        labels = labels.where(labels != ignoreID, padTokenID)
+        decodedLabels = tokenizer.batch_decode(labels,
+                                               skip_special_tokens=True)
+        decodedLabels = [[label.strip()] for label in decodedLabels]
 
     result = computeMetrics(decodedPreds, decodedLabels)
     print(f"Epoch {epoch}: {result}")
 
 # ------------------------------- Save Model ----------------------------------
-    accelerator.wait_for_everyone()
-    unwrappedModel = accelerator.unwrap_model(model)
-    unwrappedModel.save_pretrained(outputDir, save_function=accelerator.save)
-    if accelerator.is_main_process:
-        tokenizer.save_pretrained(outputDir)
+    if result["BERTScore F1"] > previousValidationResult:
+        # Don't kill best model.
+        previousValidationResult = result["BERTScore F1"]
+        accelerator.wait_for_everyone()
+        unwrappedModel = accelerator.unwrap_model(model)
+        unwrappedModel.save_pretrained(outputDir,
+                                       save_function=accelerator.save)
+        if accelerator.is_main_process:
+            tokenizer.save_pretrained(outputDir)
+        nonImprovingEpochs = 0
+    else:
+        if epoch >= minEpochs:  # Train for minimum number of epochs anyway.
+            nonImprovingEpochs += 1
+            if nonImprovingEpochs > 5:  # Don't waste compute if not improving.
+                with open("TrainData.txt", 'w') as fp:
+                    fp.write(f"actualEpochs: {epoch}\n")
+                break
+        model = model.from_pretrained(outputDir).to(torch.device("cuda:0"))
+with open("TrainData.txt", 'a') as fp:
+    fp.write(f"baseName: {baseName}\n")
+    fp.write(f"metricName: {metricName}\n")
+    fp.write(f"outputDir: {outputDir}\n")
+    fp.write(f"numEpochs: {numTrainEpochs}\n")
