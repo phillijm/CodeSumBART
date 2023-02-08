@@ -210,11 +210,11 @@ for epoch in range(numTrainEpochs):
             nonImprovingEpochs += 1
             if nonImprovingEpochs > 5:  # Don't waste compute if not improving.
                 with open("TrainData.txt", 'w') as fp:
-                    fp.write(f"actualEpochs: {epoch}")
+                    fp.write(f"actualEpochs: {epoch}\n")
                 break
         model = model.from_pretrained(outputDir).to(torch.device("cuda:0"))
 with open("TrainData.txt", 'a') as fp:
-    fp.write(f"baseName: {baseName}")
-    fp.write(f"metricName: {metricName}")
-    fp.write(f"outputDir: {outputDir}")
-    fp.write(f"numEpochs: {numTrainEpochs}")
+    fp.write(f"baseName: {baseName}\n")
+    fp.write(f"metricName: {metricName}\n")
+    fp.write(f"outputDir: {outputDir}\n")
+    fp.write(f"numEpochs: {numTrainEpochs}\n")
