@@ -6,12 +6,16 @@ import os
 import sys
 import json
 import evaluate
+import torch
 from multiprocessing import Process
 from meteor import Meteor
 from pathlib import Path
+from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM, \
                          AutoTokenizer, \
                          pipeline
+
+torch.cuda.empty_cache()  # Clear the PyTorch cache - saves GPU memory.
 
 # Set path seperator for windows or *nix.
 if os.name == "nt":
@@ -60,12 +64,7 @@ def getFrugalScores(predictions: list, references: list) -> list:
         list: the FrugalScores.
     """
     metric = evaluate.load("frugalscore")
-    refs = []
-    for ref in references:
-        refs.append(ref)
-    for cnt in range(len(predictions)):
-        if predictions[cnt] == '':
-            predictions[cnt] = " "
+    refs = [label for label in references]
     return metric.compute(predictions=predictions,
                           references=refs,
                           batch_size=48,
@@ -83,14 +82,9 @@ def getBertScores(predictions: list, references: list) -> list:
         list: the BERTScore F1s.
     """
     metric = evaluate.load("bertscore")
-    refs = []
-    for ref in references:
-        refs.append(ref)
-    for cnt in range(len(predictions)):
-        if predictions[cnt] == '':
-            predictions[cnt] = " "
+    refs = [label for label in references]
     return metric.compute(predictions=predictions,
-                          references=references,
+                          references=refs,
                           model_type="microsoft/deberta-xlarge-mnli",
                           lang="en",
                           device="cuda",
@@ -145,9 +139,7 @@ def getBleu(reference: str,
     Returns:
         float: the BLEU-n value.
     """
-    refs = [[reference]]
-    predictions = [prediction]
-    return getAverageBleu(refs, predictions, n, smoothed)
+    return getAverageBleu([[reference]], [prediction], n, smoothed)
 
 
 def getAverageBleu(references: list,
@@ -166,13 +158,7 @@ def getAverageBleu(references: list,
         float: the BLEU-n value.
     """
     metric = evaluate.load("bleu")
-    refs = [[]]
-    for ref in references:
-        refs.append([ref])
-    del refs[0]
-    for cnt in range(len(predictions)):
-        if predictions[cnt] == '':
-            predictions[cnt] = " "
+    refs = [[label] for label in references]
     return metric.compute(predictions=predictions,
                           references=refs,
                           max_order=n,
@@ -181,7 +167,7 @@ def getAverageBleu(references: list,
 
 def getRouges(references: list,
               predictions: list,
-              rougeType: str = "rougeL") -> list:
+              rougeType: str) -> list:
     """ Returns a list of all ROUGE values for reference-prediction pairs.
 
     Args:
@@ -190,7 +176,7 @@ def getRouges(references: list,
         rougeType (string): the type (IE: rouge1, rougeL) (defaults to rougeL).
 
     Returns:
-        list: the BLEU-n values.
+        list: the ROUGE-n values.
     """
     rouges = []
     for cnt in range(len(references)):
@@ -200,7 +186,7 @@ def getRouges(references: list,
 
 def getRouge(reference: str,
              prediction: str,
-             rougeType: str = "rougeL") -> float:
+             rougeType: str) -> float:
     """ Returns a ROUGE value for a reference-prediction pair.
 
     Args:
@@ -211,14 +197,12 @@ def getRouge(reference: str,
     Returns:
         float: the ROUGE value.
     """
-    refs = [reference]
-    predictions = [prediction]
-    return getAverageRouge(refs, predictions, rougeType)
+    return getAverageRouge([reference], [prediction], rougeType)
 
 
 def getAverageRouge(labels: list,
                     predictions: list,
-                    rougeType: str = "rougeL") -> float:
+                    rougeType: str) -> float:
     """ Returns a ROUGE value for a corpus of reference-prediction pairs.
 
     Args:
@@ -230,12 +214,7 @@ def getAverageRouge(labels: list,
         float: the final computed metric.
     """
     metric = evaluate.load("rouge")
-    refs = []
-    for ref in labels:
-        refs.append(ref[0])
-    for cnt in range(len(predictions)):
-        if predictions[cnt] == '':
-            predictions[cnt] = " "
+    refs = [[label] for label in labels]
     return metric.compute(predictions=predictions,
                           references=refs,
                           rouge_types=[rougeType],
@@ -308,7 +287,7 @@ def bleuNProcess(references: list,
 
 def rougeNProcess(references: list,
                   predictions: list,
-                  rougeType: str = "rougeL"):
+                  rougeType: str):
     """ Generates and saves ROUGE score.  Called by a multiprocessing.Process.
 
     Args:
@@ -359,21 +338,23 @@ def main(argv: list):
     # ---------------------- Find/Generate model outputs ----------------------
     if not Path(f".{psep}out.txt").is_file():
         print("No model outputs found.  Generating...")
-        sentences = []
-        for cnt in range(len(data)):
-            sentences.append(data[cnt]["text"])
-        batchSize = 64
+        sentences = [sentence["text"] for sentence in data]
+        batchSize = 48
         summarizationPipe = pipeline("summarization",
                                      model=model,
                                      tokenizer=tokenizer,
                                      device=0,  # Use 0 for GPU
-                                     batch_size=batchSize)
-        # Batch the data - memory
+                                     batch_size=batchSize,
+                                     num_workers=16)
         try:
             with open(f".{psep}out.txt", 'w') as fp:
-                for out in summarizationPipe(sentences,
-                                             batch_size=batchSize):
+                for out in tqdm(summarizationPipe(sentences,
+                                             batch_size=batchSize)):
                     fp.write(str(out) + "\n")
+            # Stop hogging GPU memory - shouldn't be needed but is.
+            import gc
+            torch.cuda.empty_cache()
+            gc.collect()
         except MemoryError as e:
             sys.exit(e)
     else:
@@ -382,9 +363,7 @@ def main(argv: list):
     with open(f".{psep}out.txt", 'r') as fp:
         predictions = [line.rstrip('\'}\n') for line in fp]
     predictions = [ln.replace("{'summary_text': '", '') for ln in predictions]
-    references = []
-    for cnt in range(len(data)):
-        references.append(data[cnt]["summary"])
+    references = [reference["text"] for reference in data]
     references = [ln.replace("{'summary_text': '", '') for ln in references]
     processes = []
     # ------------------------ Generate metric scores -------------------------
