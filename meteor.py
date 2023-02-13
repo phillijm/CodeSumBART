@@ -25,9 +25,11 @@ class Meteor():
             pathsep = "/"
         with open(f"{path}{pathsep}pres.txt", 'w', encoding='utf-8') as fp:
             for x in predictions:
+                x = x.rstrip("\n")
                 fp.write(f"{x}\n")
         with open(f"{path}{pathsep}refs.txt", 'w', encoding='utf-8') as fp:
             for x in references:
+                x = x.rstrip("\n")
                 fp.write(f"{x}\n")
 
     def callMeteor(self, path: str) -> None:
