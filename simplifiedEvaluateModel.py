@@ -123,7 +123,7 @@ def getAverageRouge(labels: list,
     Args:
         labels (list): the labels associated with the predictions.
         predictions (list): the predictions returned by the model.
-        rougeType (string): the type (IE: rouge1, rougeL) (defaults to rougeL).
+        rougeType (string): the type (IE: rouge1, rougeL).
 
     Returns:
         float: the final computed metric.
@@ -246,9 +246,10 @@ def main(argv: list):
 
     with open(f".{psep}out.txt", 'r') as fp:
         predictions = [line.rstrip('\'}\n') for line in fp]
+    predictions = [ln.rstrip('\"}\n') for ln in predictions]
     predictions = [ln.replace("{'summary_text': '", '') for ln in predictions]
-    references = [reference["text"] for reference in data]
-    references = [ln.replace("{'summary_text': '", '') for ln in references]
+    predictions = [ln.replace("{'summary_text': \"", '') for ln in predictions]
+    references = [reference["summary"] for reference in data]
     for x in predictions:
         x = x.rstrip("\n")
     for x in references:

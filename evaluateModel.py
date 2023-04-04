@@ -64,9 +64,8 @@ def getFrugalScores(predictions: list, references: list) -> list:
         list: the FrugalScores.
     """
     metric = evaluate.load("frugalscore")
-    refs = [label for label in references]
     return metric.compute(predictions=predictions,
-                          references=refs,
+                          references=references,
                           batch_size=48,
                           device='gpu')["scores"]
 
@@ -82,9 +81,8 @@ def getBertScores(predictions: list, references: list) -> list:
         list: the BERTScore F1s.
     """
     metric = evaluate.load("bertscore")
-    refs = [label for label in references]
     return metric.compute(predictions=predictions,
-                          references=refs,
+                          references=references,
                           model_type="microsoft/deberta-xlarge-mnli",
                           lang="en",
                           device="cuda",
@@ -106,7 +104,7 @@ def getAverage(metrics: list) -> float:
 def getBleus(references: list,
              predictions: list,
              n: int = 1,
-             smoothed: bool = False) -> list:
+             smoothed: bool = False) -> dict:
     """ Returns a list of all BLEU-n values for reference-prediction pairs.
 
     Args:
@@ -116,30 +114,15 @@ def getBleus(references: list,
         smoothed (bool): apply smoothing (defaults to false).
 
     Returns:
-        list: the BLEU-n values.
+        dict: the BLEU-n values.
     """
-    bleus = []
+    bleus = {}
     for cnt in range(len(references)):
-        bleus.append(getBleu(references[cnt], predictions[cnt], n, smoothed))
+        bleus[cnt] = getAverageBleu([references[cnt]],
+                                    [predictions[cnt]],
+                                    n,
+                                    smoothed)
     return bleus
-
-
-def getBleu(reference: str,
-            prediction: str,
-            n: int = 1,
-            smoothed: bool = False) -> float:
-    """ Returns a BLEU-n value for a reference-prediction pair.
-
-    Args:
-        references (list): a reference.
-        predictions (list): a prediction.
-        n (int): the BLEU n-gram value (IE: BLEU-1, BLEU-2) (defaults to 1).
-        smoothed (bool): apply smoothing (defaults to false).
-
-    Returns:
-        float: the BLEU-n value.
-    """
-    return getAverageBleu([[reference]], [prediction], n, smoothed)
 
 
 def getAverageBleu(references: list,
@@ -167,7 +150,7 @@ def getAverageBleu(references: list,
 
 def getRouges(references: list,
               predictions: list,
-              rougeType: str) -> list:
+              rougeType: str) -> dict:
     """ Returns a list of all ROUGE values for reference-prediction pairs.
 
     Args:
@@ -176,28 +159,14 @@ def getRouges(references: list,
         rougeType (string): the type (IE: rouge1, rougeL) (defaults to rougeL).
 
     Returns:
-        list: the ROUGE-n values.
+        dict: the ROUGE-n values.
     """
-    rouges = []
+    rouges = {}
     for cnt in range(len(references)):
-        rouges.append(getRouge(references[cnt], predictions[cnt], rougeType))
+        rouges[cnt] = getAverageRouge([references[cnt]],
+                                      [predictions[cnt]],
+                                      rougeType)
     return rouges
-
-
-def getRouge(reference: str,
-             prediction: str,
-             rougeType: str) -> float:
-    """ Returns a ROUGE value for a reference-prediction pair.
-
-    Args:
-        references (list): a reference.
-        predictions (list): a prediction.
-        rougeType (string): the type (IE: rouge1, rougeL) (defaults to rougeL).
-
-    Returns:
-        float: the ROUGE value.
-    """
-    return getAverageRouge([reference], [prediction], rougeType)
 
 
 def getAverageRouge(labels: list,
@@ -271,14 +240,14 @@ def bleuNProcess(references: list,
     """
     if smoothed:
         with open(f".{psep}sbleu{n}.txt", 'w') as fp:
-            for val in getBleus(references, predictions, n, smoothed):
+            for val in getBleus(references, predictions, n, smoothed).values():
                 fp.write(str(val) + '\n')
         with open(f".{psep}asbleu{n}.txt", 'w') as fp:
             fp.write(str(getAverageBleu(references, predictions, n, smoothed)))
         print(f"    Calculated Smoothed BLEU-{n}")
     else:
         with open(f".{psep}bleu{n}.txt", 'w') as fp:
-            for val in getBleus(references, predictions, n, smoothed):
+            for val in getBleus(references, predictions, n, smoothed).values():
                 fp.write(str(val) + '\n')
         with open(f".{psep}ableu{n}.txt", 'w') as fp:
             fp.write(str(getAverageBleu(references, predictions, n, smoothed)))
@@ -296,7 +265,7 @@ def rougeNProcess(references: list,
         rougeType (str): Which ROUGE score to generate.  Defaults to ROUGE-L.
     """
     with open(f".{psep}{rougeType}.txt", 'w') as fp:
-        for val in getRouges(references, predictions, rougeType):
+        for val in getRouges(references, predictions, rougeType).values():
             fp.write(str(val) + '\n')
     with open(f".{psep}a{rougeType}.txt", 'w') as fp:
         fp.write(str(getAverageRouge(references, predictions, rougeType)))
@@ -349,7 +318,7 @@ def main(argv: list):
         try:
             with open(f".{psep}out.txt", 'w') as fp:
                 for out in tqdm(summarizationPipe(sentences,
-                                             batch_size=batchSize)):
+                                                  batch_size=batchSize)):
                     fp.write(str(out) + "\n")
             # Stop hogging GPU memory - shouldn't be needed but is.
             import gc
@@ -365,6 +334,10 @@ def main(argv: list):
     predictions = [ln.replace("{'summary_text': '", '') for ln in predictions]
     references = [reference["text"] for reference in data]
     references = [ln.replace("{'summary_text': '", '') for ln in references]
+    for x in predictions:
+        x = x.rstrip("\n")
+    for x in references:
+        x = x.rstrip("\n")
     processes = []
     # ------------------------ Generate metric scores -------------------------
     print("Calculating FrugalScore...")
@@ -445,19 +418,20 @@ def main(argv: list):
         }},
     """)
         fp.write("] ")
-    print("Calculating and saving averages...")
-    with open(f".{psep}eval.txt", 'w') as fp:
-        fp.write(f""" Results:
-        FrugalScore: {getAverage(frugalScores)}
-        BERTScore: {getAverage(bertScores)}
-        BLEU-1: {aBleu1s}
-        BLEU-2: {aBleu2s}
-        BLEU-3: {aBleu3s}
-        BLEU-4: {aBleu4s}
-        Smoothed BLEU-4: {aSBleu4s}
-        ROUGE-1: {aRouge1s}
-        ROUGE-L: {aRougeLs}
-        METEOR: {aMeteors}""")
+    if not Path(f".{psep}eval.txt").is_file():
+        print("Calculating and saving averages...")
+        with open(f".{psep}eval.txt", 'w') as fp:
+            fp.write(f""" Results:
+            FrugalScore: {getAverage(frugalScores)}
+            BERTScore: {getAverage(bertScores)}
+            BLEU-1: {aBleu1s}
+            BLEU-2: {aBleu2s}
+            BLEU-3: {aBleu3s}
+            BLEU-4: {aBleu4s}
+            Smoothed BLEU-4: {aSBleu4s}
+            ROUGE-1: {aRouge1s}
+            ROUGE-L: {aRougeLs}
+            METEOR: {aMeteors}""")
     # -------- Print metrics to the screen and delete temporary files ---------
     with open(f".{psep}eval.txt", 'r') as fp:
         print(fp.read())
