@@ -8,6 +8,7 @@
 Author: Jesse Phillips <j.m.phillips@lancaster.ac.uk>
 """
 import os
+import subprocess
 import torch
 import time
 import shutil
@@ -160,7 +161,7 @@ class AdamWBARTMETEORModel(pl.LightningModule):
                               padTokenID.to(self.device))
         decodedLabels = tokenizer.batch_decode(labels,
                                                skip_special_tokens=True)
-        decodedLabels = [[label.strip()] for label in decodedLabels]
+        decodedLabels = [label.strip() for label in decodedLabels]
         batch = {k: torch.Tensor(v) for k, v in batch.items()}
         outputs = self.model(**batch)
         logits = outputs.logits
@@ -169,7 +170,10 @@ class AdamWBARTMETEORModel(pl.LightningModule):
         decodedPreds = [pred.strip() for pred in decodedPreds]
         meteor = Meteor()  # Using my lib for the official implementation.
         now = time.time_ns()
-        os.makedirs(f"./{now}")  # Make the temp directory for METEOR to use.
+        commandList = [f"mkdir ./{str(now)}", f"cp -r meteor ./{str(now)}/"]
+        for c in commandList:
+            cmd = subprocess.Popen(c.split(), stdout=subprocess.PIPE)
+            cmd.communicate()
         meteor.storeData(decodedPreds, decodedLabels, f"./{now}")
         meteor.callMeteor(f"./{now}")
         mt = meteor.getFinalScore(f"./{now}", "tmpstdout.txt")
