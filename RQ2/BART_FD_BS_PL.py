@@ -139,12 +139,18 @@ class AdamWBARTBERTScoreModel(pl.LightningModule):
         Returns:
             torch.Tensor: the loss.
         """
+        torch.cuda.empty_cache()
+        gc.collect()
+
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
         loss, output = self(input_ids, attention_mask, labels)
         return loss
+
+    def on_validation_epoch_start(self):
+        self.metric = self.getMetric("bertscore")
 
     def validation_step(self, batch: dict, batch_idx: int) -> float:
         """ The validation loop for our model.
@@ -159,20 +165,19 @@ class AdamWBARTBERTScoreModel(pl.LightningModule):
                               padTokenID.to(self.device))
         decodedLabels = tokenizer.batch_decode(labels,
                                                skip_special_tokens=True)
-        decodedLabels = [[label.strip()] for label in decodedLabels]
+        decodedLabels = [label.strip() for label in decodedLabels]
         batch = {k: torch.Tensor(v) for k, v in batch.items()}
         outputs = self.model(**batch)
         logits = outputs.logits
         decodedPreds = tokenizer.batch_decode(torch.argmax(logits, dim=-1),
                                               skip_special_tokens=True)
         decodedPreds = [pred.strip() for pred in decodedPreds]
-        metric = evaluate.load("bertscore")
-        bs = metric.compute(predictions=decodedPreds,
-                            references=decodedLabels,
-                            model_type="microsoft/deberta-xlarge-mnli",
-                            lang="en",
-                            device="cuda",
-                            batch_size=48)["f1"]
+        bs = self.metric.compute(predictions=decodedPreds,
+                                 references=decodedLabels,
+                                 model_type="microsoft/deberta-xlarge-mnli",
+                                 lang="en",
+                                 device="cuda",
+                                 batch_size=48)["f1"]
         bert = sum(bs) / len(bs)
         self.log("val_bs", bert, on_step=False, on_epoch=True, prog_bar=True)
         return bert
@@ -300,6 +305,8 @@ class FuncomDataModule(SummarizationDataModule):
 
 if __name__ == '__main__':
     os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"  # GPUs we're allowed to use.
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
+    # ^ Prevent GPU Memory Fragmentation.  Recommended by PyTorch.
     torch.multiprocessing.freeze_support()
 
     torch.cuda.empty_cache()  # Clear the PyTorch cache - saves GPU memory.

@@ -159,7 +159,7 @@ class AdamWBARTFrugalScoreModel(pl.LightningModule):
                               padTokenID.to(self.device))
         decodedLabels = tokenizer.batch_decode(labels,
                                                skip_special_tokens=True)
-        decodedLabels = [[label.strip()] for label in decodedLabels]
+        decodedLabels = [label.strip() for label in decodedLabels]
         batch = {k: torch.Tensor(v) for k, v in batch.items()}
         outputs = self.model(**batch)
         logits = outputs.logits
