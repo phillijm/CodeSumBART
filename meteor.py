@@ -2,6 +2,10 @@
 This implements a Python class as an interface for the official Java
 implementation of METEOR v1.5.  For Windows, Mac, & Linux.
 
+You will need to download the official Java implementation of METEOR for this
+to work.  Place the download in a folder named "meteor":
+        https://www.cs.cmu.edu/~alavie/METEOR/index.html#Download
+
 Author: Jesse Phillips <j.m.phillips@lancaster.ac.uk>
 """
 import os
@@ -19,15 +23,11 @@ class Meteor():
             references (list): the references.
             path (string): the filepath you want to save them to.
         """
-        if os.name == "nt":
-            pathsep = "\\"
-        else:
-            pathsep = "/"
-        with open(f"{path}{pathsep}pres.txt", 'w', encoding='utf-8') as fp:
+        with open(f"{path}/pres.txt", 'w', encoding="UTF-8") as fp:
             for x in predictions:
                 x = x.replace("\n", "")
                 fp.write(f"{x}\n")
-        with open(f"{path}{pathsep}refs.txt", 'w', encoding='utf-8') as fp:
+        with open(f"{path}/refs.txt", 'w', encoding="UTF-8") as fp:
             for x in references:
                 x = x.replace("\n", "")
                 fp.write(f"{x}\n")
@@ -51,8 +51,8 @@ class Meteor():
         args = "-l en -norm"
         commandString = f"{command} {meteorLocation} {inputFiles} {args}"
 
-        _stdout = open(f"{path}{pathsep}tmpstdout.txt", 'w')
-        _stderr = open(f"{path}{pathsep}tmpstderr.txt", 'w')
+        _stdout = open(f"{path}/tmpstdout.txt", 'w')
+        _stderr = open(f"{path}/tmpstderr.txt", 'w')
 
         cmd = subprocess.Popen(commandString,
                                stderr=_stderr,
@@ -75,12 +75,7 @@ class Meteor():
         Return:
             list: the METEOR scores.
         """
-        if os.name == "nt":
-            pathsep = "\\"
-        else:
-            pathsep = "/"
-
-        with open(f"{path}{pathsep}{meteorOutput}", 'r') as fp:
+        with open(f"{path}/{meteorOutput}", 'r') as fp:
             lines = [line.rstrip() for line in fp]
             del lines[:11]  # Remove content at start of file
             del lines[inputLength:]  # Remove content after the end
@@ -104,12 +99,7 @@ class Meteor():
         Return:
             float: the METEOR score.
         """
-        if os.name == "nt":
-            pathsep = "\\"
-        else:
-            pathsep = "/"
-
-        with open(f"{path}{pathsep}{meteorOutput}", 'r') as fp:
+        with open(f"{path}/{meteorOutput}", 'r') as fp:
             lines = [line.rstrip() for line in fp]
             line = lines[-1]
             if ':' in line:
