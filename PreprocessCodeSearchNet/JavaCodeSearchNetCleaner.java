@@ -94,7 +94,7 @@ public class JavaCodeSearchNetCleaner
    * @param path the path to the dataset file to clean.
    * @param file the name of the dataset file to clean.
    **/
-  public static void runner (String path, String file)
+  public static void runner(String path, String file)
   {
     JavaDatasetPreprocessor jDP = new JavaDatasetPreprocessor();
 
@@ -117,7 +117,7 @@ public class JavaCodeSearchNetCleaner
     System.out.println("Bad Methods: " + jDP.getNumberOfBadMethods());
   }
 
-  public static void main (String[] args)
+  public static void main(String[] args)
   {
     String path = "C:\\<YOUR_CODESEARCHNET_FILEPATH_GOES_HERE>\\java\\";
     String datasetFile = "pl_dataset.json";
