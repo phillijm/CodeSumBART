@@ -135,3 +135,5 @@ meteor/
 dataset/
 Old-Models/
 ProcessExampleOutputs/
+evaluateModel.py
+simplifiedEvaluateModel.py
