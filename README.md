@@ -1,35 +1,68 @@
 # EpochValidationExperiment
 
-Replication package for our paper "How the Choice of Epoch Validation Metric Affects Transformers for Neural Source Code Summarisation".
+Replication package for our paper "CodeSumBART: Metric-Oriented Pretraining for Neural Source Code Summarisation Transformers".
 
 ## To run
 
 - Download the Python scripts you would like to replicate, as well as the requirements.txt file.
-- Download your dataset.  We used the Funcom datase ([Paper](https://aclanthology.org/N19-1394.pdf), [Dataset](http://leclair.tech/data/funcom/index_v5.html#procdata)), preprocessed with JavaDatasetCleaner ([Paper](https://www.lancaster.ac.uk/~elhaj/docs/gem2022.pdf), [GitHub](https://github.com/phillijm/JavaDatasetCleaner/))
-  - You may need to edit the generateJSONData method of the script you would like to replicate if you aren't using the same data format we did.
-- In a container or virtual environment, install the PyPI packages from requirements.txt.
+- Download the meteor.py script, and METEOR v1.5 ([Paper](https://aclanthology.org/W14-3348/), [Download](https://www.cs.cmu.edu/~alavie/METEOR/)).
+  - You will need to extract METEOR to a directory named "meteor".
+- Download your dataset.  We used the Funcom dataset ([Paper](https://aclanthology.org/N19-1394.pdf), [Dataset](http://leclair.tech/data/funcom/index_v5.html#procdata)), preprocessed with JavaDatasetCleaner ([Paper](https://www.lancaster.ac.uk/~elhaj/docs/gem2022.pdf), [GitHub](https://github.com/phillijm/JavaDatasetCleaner/))
+  - You will need to edit the transformDataset method of the script you would like to replicate if you aren't using the same data format we did.
+- Install the PyPI packages from requirements.txt, as well as Java 17 or higher.
 
 ``` bash
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-- Run the script you would like to replicate using the TOKENIZERS_PARALLELISM flag.
+- Run the script you would like to replicate using the TOKENIZERS_PARALLELISM flag.  We recommend caching Huggingface Datasets and Transformers.  Here is an example shell script to do that.
 
 ``` bash
-TOKENIZERS_PARALLELISM=true python3 Exp1-FuncomDataset-XXX.py
+#!/bin/bash
+
+export HF_DATASETS_CACHE=./data/dataset_cache
+export TRANSFORMERS_CACHE=./data/transformer_cache
+export TOKENIZERS_PARALLELISM=true
+
+python YOUR_CHOSEN_MODEL.py
 ```
 
 ## To evaluate your model
 
-- Download the evaluateModel.py script, the meteor.py script, and METEOR v1.5 ([Paper](https://aclanthology.org/W14-3348/), [Download](https://www.cs.cmu.edu/~alavie/METEOR/)).
-  - You will need to extract METEOR to a directory named "meteor".
-- Run the evaluateModel.py script, passing it the directory of the model you would like to evaluate.
+- The models used here are self-evaluating: once the model is trained, finalEval.txt is generated, which contains the results of the evaluation metrics.
 
-``` bash
-python3 evaluateModel.py Exp1-FuncomDataset-Results-XXX
+## Datasets
+
+We used the Funcom dataset ([Paper](https://aclanthology.org/N19-1394.pdf), [Dataset](http://leclair.tech/data/funcom/index_v5.html#procdata)), preprocessed with JavaDatasetCleaner ([Paper](https://www.lancaster.ac.uk/~elhaj/docs/gem2022.pdf), [GitHub](https://github.com/phillijm/JavaDatasetCleaner/)), which saves the dataset in the format used by NeuralCodeSum ([Paper](https://aclanthology.org/2020.acl-main.449.pdf)).  We used the Python method below to convert this into JSON, which can be read by the transformDataset method in our model training code.
+
+``` python
+def saveJSONData(dir):
+    """ Saves the dataset in JSON format.
+
+    Args:
+        dir (string): the name of the directory holding the dataset you want.
+    """
+    from pathlib import Path
+    if Path(f"./dataset/{dir}/dataset.json").is_file():
+        return
+
+    import json
+    print(f"Generating Dataset: {dir}")
+    data = []
+    with open(f"./dataset/{dir}/code.original_subtoken",
+              encoding='UTF-8') as fp:
+        code = fp.readlines()
+    with open(f"./dataset/{dir}/javadoc.original", encoding='UTF-8') as fp1:
+        comments = fp1.readlines()
+    for cnt in range(len(code) - 1):
+        # for cnt in range(5):
+        data.append({})
+        data[cnt]["text"] = code[cnt]
+        data[cnt]["summary"] = comments[cnt]
+    jsonData = json.dumps(data, indent=4)
+
+    with open(f"./dataset/{dir}/dataset.json", "w") as fp:
+        fp.write(jsonData)
 ```
 
-- The script will run the model and save its outputs, as well as testing them against a suite of metrics.
-  - Model outputs will be saved to "out.txt".
-  - Evaluations of all model outputs will be saved to "eval.json".
-  - Overall model evaluation will be saved to "eval.txt".
+We also evaluated our results using the CodeSearchNet dataset ([Paper](https://arxiv.org/pdf/1909.09436.pdf), [Dataset](https://github.com/github/CodeSearchNet)).  Our scripts for preprocessing that dataset can be found in the "PreprocessCodeSearchNet" directory.
