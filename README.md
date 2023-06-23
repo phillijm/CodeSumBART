@@ -1,6 +1,6 @@
-# EpochValidationExperiment
+# CodeSumBART: Metric-Oriented Pretraining for Neural Source Code Summarisation Transformers
 
-Replication package for our paper "CodeSumBART: Metric-Oriented Pretraining for Neural Source Code Summarisation Transformers".
+Replication package for "CodeSumBART: Metric-Oriented Pretraining for Neural Source Code Summarisation Transformers".
 
 ## To run
 
