@@ -33,7 +33,7 @@ python YOUR_CHOSEN_MODEL.py
 
 ## Datasets
 
-We used the Funcom dataset ([Paper](https://aclanthology.org/N19-1394.pdf), [Dataset](http://leclair.tech/data/funcom/index_v5.html#procdata)), preprocessed with JavaDatasetCleaner ([Paper](https://www.lancaster.ac.uk/~elhaj/docs/gem2022.pdf), [GitHub](https://github.com/phillijm/JavaDatasetCleaner/)), which saves the dataset in the format used by NeuralCodeSum ([Paper](https://aclanthology.org/2020.acl-main.449.pdf)).  We used the Python method below to convert this into JSON, which can be read by the transformDataset method in our model training code.
+We used the Funcom dataset ([Paper](https://aclanthology.org/N19-1394.pdf), [Dataset](http://leclair.tech/data/funcom/index_v5.html#procdata)), preprocessed with JavaDatasetCleaner ([Paper](https://www.lancaster.ac.uk/~elhaj/docs/gem2022.pdf), [GitHub](https://github.com/phillijm/JavaDatasetCleaner/)), which saves the dataset in the format used by NeuralCodeSum ([Paper](https://aclanthology.org/2020.acl-main.449.pdf)).  We used the Python method below to convert this into JSON which can be read by the transformDataset method in our model training code.
 
 ``` python
 def saveJSONData(dir):
@@ -43,16 +43,16 @@ def saveJSONData(dir):
         dir (string): the name of the directory holding the dataset you want.
     """
     from pathlib import Path
-    if Path(f"./dataset/{dir}/dataset.json").is_file():
+    if Path(f"../dataset/{dir}/dataset.json").is_file():
         return
 
     import json
     print(f"Generating Dataset: {dir}")
     data = []
-    with open(f"./dataset/{dir}/code.original_subtoken",
+    with open(f"../dataset/{dir}/code.original_subtoken",
               encoding='UTF-8') as fp:
         code = fp.readlines()
-    with open(f"./dataset/{dir}/javadoc.original", encoding='UTF-8') as fp1:
+    with open(f"../dataset/{dir}/javadoc.original", encoding='UTF-8') as fp1:
         comments = fp1.readlines()
     for cnt in range(len(code) - 1):
         # for cnt in range(5):
@@ -61,8 +61,10 @@ def saveJSONData(dir):
         data[cnt]["summary"] = comments[cnt]
     jsonData = json.dumps(data, indent=4)
 
-    with open(f"./dataset/{dir}/dataset.json", "w") as fp:
+    with open(f"../dataset/{dir}/dataset.json", "w") as fp:
         fp.write(jsonData)
 ```
 
 We also evaluated our results using the CodeSearchNet dataset ([Paper](https://arxiv.org/pdf/1909.09436.pdf), [Dataset](https://github.com/github/CodeSearchNet)).  Our scripts for preprocessing that dataset can be found in the "PreprocessCodeSearchNet" directory.
+
+The provided training code for the models expect the data to be in a directory named "dataset" above the model directory.
