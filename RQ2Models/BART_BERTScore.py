@@ -125,10 +125,18 @@ class AdamWBARTBERTScoreModel(pl.LightningModule):
 
     def on_train_epoch_start(self):
         if os.path.exists(checkpointCallback.best_model_path):
-            oldWeights = torch.load(checkpointCallback.best_model_path
-                                    )['state_dict']
-            model.load_state_dict(oldWeights)
-            self.model.train()
+            if checkpointCallback.best_model_path != \
+               checkpointCallback.last_model_path:
+                oldWeights = torch.load(checkpointCallback.best_model_path
+                                        )['state_dict']
+                model.load_state_dict(oldWeights)
+
+                # Add noise to weights to tweak training.
+                with torch.no_grad():
+                    for par in model.parameters():
+                        par.add_((torch.randn(par.size()) * 0.001).to("cuda"))
+
+                model.train()
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         """ The training loop for our model.
@@ -139,9 +147,6 @@ class AdamWBARTBERTScoreModel(pl.LightningModule):
         Returns:
             torch.Tensor: the loss.
         """
-        torch.cuda.empty_cache()
-        gc.collect()
-
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
@@ -304,9 +309,6 @@ class FuncomDataModule(SummarizationDataModule):
 
 
 if __name__ == '__main__':
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"  # GPUs we're allowed to use.
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
-    # ^ Prevent GPU Memory Fragmentation.  Recommended by PyTorch.
     torch.multiprocessing.freeze_support()
 
     torch.cuda.empty_cache()  # Clear the PyTorch cache - saves GPU memory.
