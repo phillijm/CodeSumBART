@@ -124,7 +124,9 @@ class AdamWBARTModel(pl.LightningModule):
         return outputs.loss, outputs.logits
 
     def on_train_epoch_start(self):
-                model.train()
+        """ Start each training epoch.
+        """
+        model.train()
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         """ The training loop for our model.
@@ -230,16 +232,18 @@ class AdamWBARTModel(pl.LightningModule):
         return outs
 
     def on_test_epoch_end(self):
+        """ After all test batches are complete, save the test data.
+        """
         bleu1, \
-              bleu2, \
-              bleu3, \
-              bleu4, \
-              sBleu4, \
-              rougel, \
-              rouge1, \
-              bertscore, \
-              frugalscore, \
-              meteor = ([] for i in range(10))
+            bleu2, \
+            bleu3, \
+            bleu4, \
+            sBleu4, \
+            rougel, \
+            rouge1, \
+            bertscore, \
+            frugalscore, \
+            meteor = ([] for i in range(10))
         with open("eval.txt", "r", encoding="UTF-8") as fp:
             lines = [line.rstrip() for line in fp]
             for line in lines:

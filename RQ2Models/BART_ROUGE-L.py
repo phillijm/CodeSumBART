@@ -124,6 +124,8 @@ class AdamWBARTRougeModel(pl.LightningModule):
         return outputs.loss, outputs.logits
 
     def on_train_epoch_start(self):
+        """ Before each training epoch, revert to the best model.
+        """
         if os.path.exists(checkpointCallback.best_model_path):
             if checkpointCallback.best_model_path != \
                checkpointCallback.last_model_path:
@@ -251,16 +253,18 @@ class AdamWBARTRougeModel(pl.LightningModule):
         return outs
 
     def on_test_epoch_end(self):
+        """ After all test batches are complete, save the test data.
+        """
         bleu1, \
-              bleu2, \
-              bleu3, \
-              bleu4, \
-              sBleu4, \
-              rougel, \
-              rouge1, \
-              bertscore, \
-              frugalscore, \
-              meteor = ([] for i in range(10))
+            bleu2, \
+            bleu3, \
+            bleu4, \
+            sBleu4, \
+            rougel, \
+            rouge1, \
+            bertscore, \
+            frugalscore, \
+            meteor = ([] for i in range(10))
         with open("eval.txt", "r", encoding="UTF-8") as fp:
             lines = [line.rstrip() for line in fp]
             for line in lines:
