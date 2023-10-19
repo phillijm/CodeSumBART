@@ -24,6 +24,13 @@ export HF_DATASETS_CACHE=./data/dataset_cache
 export TRANSFORMERS_CACHE=./data/transformer_cache
 export TOKENIZERS_PARALLELISM=true
 
+#If training multiple models across multiple GPUs, it may help to train each
+#one on its own GPU.  To do this, you can limit the GPUs visible to the script.
+#If you do this, the model will train on the first one it can see by default.
+#
+#export CUDA_VISIBLE_DEVICES=0
+#
+
 python YOUR_CHOSEN_MODEL.py
 ```
 
