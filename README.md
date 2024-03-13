@@ -1,6 +1,6 @@
-# CodeSumBART: Metric-Oriented Pretraining for Neural Source Code Summarisation Transformers
+# Metric-Oriented Pretraining of Neural Source Code Summarisation Transformers to Enable more Secure Software Development
 
-Replication package for "CodeSumBART: Metric-Oriented Pretraining for Neural Source Code Summarisation Transformers".
+Replication package for "Metric-Oriented Pretraining of Neural Source Code Summarisation Transformers to Enable more Secure Software Development".
 
 ## To run
 
