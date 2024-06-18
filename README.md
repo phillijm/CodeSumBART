@@ -1,6 +1,6 @@
 # Metric-Oriented Pretraining of Neural Source Code Summarisation Transformers to Enable more Secure Software Development
 
-Replication package for "Metric-Oriented Pretraining of Neural Source Code Summarisation Transformers to Enable more Secure Software Development".
+Replication package for "Metric-Oriented Pretraining of Neural Source Code Summarisation Transformers to Enable more Secure Software Development", upcoming in the proceedings of [NLPAICS'2024](https://nlpaics.com/accepted-papers/).
 
 ## To run
 
